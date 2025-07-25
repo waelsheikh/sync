@@ -67,7 +67,6 @@ Ability to use Record class as analog to browse_record:
 import six
 import re
 from extend_me import Extensible
-from pkg_resources import parse_version
 
 # project imports
 from .connection import get_connector, DEFAULT_TIMEOUT
@@ -248,33 +247,29 @@ class Client(Extensible):
     @property
     def server_version(self):
         """ Server base version  ('8.0', '9.0', etc)
-
-            (Already parsed with ``pkg_resources.parse_version``)
         """
+        # This now correctly returns the version as a string, e.g., "18.0"
         return self.services.db.server_base_version()
 
     @property
     def database_version_full(self):
         """ Full database base version ('9.0.1.3', etc)
-
-            (Already parsed with ``pkg_resources.parse_version``)
         """
         if self._database_version_full is None:
             base_module = self.get_obj('ir.module.module').search_records(
                 [('name', '=', 'base')])[0]
-            self._database_version_full = parse_version(
-                base_module.installed_version)
+            self._database_version_full = base_module.installed_version
         return self._database_version_full
 
     @property
     def database_version(self):
         """ Base database version ('8.0', '9.0', etc)
-
-            (Already parsed with ``pkg_resources.parse_version``)
         """
-        return parse_version(
-            '.'.join(
-                self.database_version_full.base_version.split('.', 2)[:2]))
+        version_string = self.database_version_full
+        if isinstance(version_string, str):
+            # Return only the major.minor part as a string
+            return ".".join(version_string.split('.')[:2])
+        return version_string # Return as is if not a string
 
     @property
     def registered_objects(self):

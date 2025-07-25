@@ -9,7 +9,6 @@
 
 import six
 import re
-from pkg_resources import parse_version
 
 from ..service.service import ServiceBase
 
@@ -107,7 +106,7 @@ class DBService(ServiceBase):
             :rtype: bytes
         """
         # format argument available only for odoo version 9.0
-        if self.server_base_version() >= parse_version('9.0'):
+        if float(self.server_base_version()) >= 9.0:
             args = [kwargs.get('format', 'zip')]
         else:
             args = []
@@ -137,8 +136,7 @@ class DBService(ServiceBase):
         """
         assert isinstance(data, bytes), \
             "data must be instance of bytes. got: %s" % type(data)
-        if self.server_base_version() >= parse_version('8.0') and \
-                'copy' in kwargs:
+        if float(self.server_base_version()) >= 8.0 and                 'copy' in kwargs:
             args = [kwargs['copy']]
         else:
             args = []
@@ -152,21 +150,27 @@ class DBService(ServiceBase):
 
     def server_version(self):
         """ Returns server version.
-
-            (Already parsed with pkg_resources.parse_version)
         """
-        return parse_version(self.server_version_str())
+        version_string = self.server_version_str()
+        try:
+            major, minor = map(int, str(version_string).split('.')[:2])
+            return float(f"{major}.{minor}")
+        except (ValueError, IndexError):
+            return 0.0 # Return 0.0 if parsing fails
 
     def server_base_version(self):
         """ Returns server base version ('9.0', '8.0', etc)
-            parsed via pkg_resources.parse_version.
             No info about comunity / enterprise here
         """
-        base_version = self.server_version().base_version
+        base_version = self.server_version_str()
 
         # Remove 'rc.*' suffix
         base_version = re.sub(r'rc.+', '', base_version)
-        return parse_version(base_version)
+        try:
+            major, minor = map(int, str(base_version).split('.')[:2])
+            return float(f"{major}.{minor}")
+        except (ValueError, IndexError):
+            return 0.0 # Return 0.0 if parsing fails
 
     def server_version_str(self):
         """ Return server version (not wrapped by pkg.parse_version)

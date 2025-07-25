@@ -9,8 +9,6 @@
 
 import six
 from extend_me import ExtensibleByHashType
-from pkg_resources import parse_version
-
 from ..utils import (AttrDict,
                      DirMixIn,
                      preprocess_args,
@@ -279,7 +277,7 @@ class Object(six.with_metaclass(ObjectType, DirMixIn)):
             :return: list of dictionaries with data had been read
             :rtype: list
         """  # noqa
-        if self.client.server_version >= parse_version('8.0'):
+        if self.client.server_version >= 8.0:
             args, kwargs = preprocess_args(domain=domain,
                                            fields=fields,
                                            offset=offset,
@@ -308,7 +306,7 @@ class Object(six.with_metaclass(ObjectType, DirMixIn)):
         if domain is None:
             domain = []
 
-        if self.client.server_version >= parse_version('8.0'):
+        if self.client.server_version >= 8.0:
             return self.service.execute(
                 self.name, 'search_count', domain, context=context)
         else:

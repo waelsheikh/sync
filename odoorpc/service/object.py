@@ -66,12 +66,12 @@ class ObjectService(ServiceBase):
             WARNING: This method is deprecated, and will not be working
                      for Odoo 14.0+
         """
-        if self.client.server_version >= parse_version('14.0'):
+        if parse_version(str(self.client.server_version)) >= parse_version("14.0"):
             # Starting from Odoo 14.0 this method will not work, because they
             # have blocked access to ir.model model
             return []
 
-        if self.client.server_version > parse_version('8.0'):
+        if parse_version(str(self.client.server_version)) > parse_version("8.0"):
             read = self.execute('ir.model', 'search_read',
                                 domain=[], fields=['model'])
         else:

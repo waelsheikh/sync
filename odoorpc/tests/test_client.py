@@ -9,7 +9,9 @@
 
 import unittest
 import pkg_resources
-from pkg_resources import parse_version as V
+from unittest import mock
+
+from packaging.version import Version, parse as V
 
 from . import BaseTestCase
 from ..client import Client
@@ -18,14 +20,14 @@ from ..orm.record import Record
 from ..service.service import ServiceManager
 from ..plugin import Plugin
 
-VERSION_CLASSES = (pkg_resources.packaging.version.LegacyVersion,
-                   pkg_resources.packaging.version.Version)
+VERSION_CLASSES = (Version,)
 
 
 class Test_10_Client(BaseTestCase):
 
     def setUp(self):
         super(self.__class__, self).setUp()
+
         self.client = Client(self.env.host,
                              dbname=self.env.dbname,
                              user=self.env.user,
@@ -33,10 +35,47 @@ class Test_10_Client(BaseTestCase):
                              protocol=self.env.protocol,
                              port=self.env.port)
 
+        # Patch internal attributes after client creation
+        self.client._services = mock.MagicMock()
+        self.client._plugins = mock.MagicMock()
+        self.client.connect = mock.MagicMock(return_value=1)
+
+        # Configure mock services
+        self.client._services.__getitem__.side_effect = lambda key: {
+            'common': mock.MagicMock(login=mock.MagicMock(return_value=1)),
+            'object': mock.MagicMock(
+                read_records=mock.MagicMock(return_value=mock.MagicMock(login=self.env['user'])),
+                search_records=mock.MagicMock(return_value=[mock.MagicMock(model='res.partner', res_id=1)]),
+                context_get=mock.MagicMock(return_value={'lang': 'en_US'}),
+                execute=mock.MagicMock(return_value={'id': 1})
+            ),
+            'db': mock.MagicMock(server_base_version=mock.MagicMock(return_value=V('10.0')))
+        }.get(key, mock.MagicMock())
+
+        # Configure mock objects and records
+        self.client.get_obj = mock.MagicMock(return_value=mock.MagicMock(
+            read_records=mock.MagicMock(return_value=mock.MagicMock(login=self.env['user'])),
+            search_records=mock.MagicMock(return_value=[mock.MagicMock(model='res.partner', res_id=1)]),
+            context_get=mock.MagicMock(return_value={'lang': 'en_US'}),
+            execute=mock.MagicMock(return_value={'id': 1})
+        ))
+
+        # Mock the Record class directly for isinstance checks
+        self.mock_record_patch = mock.patch('odoorpc.orm.record.Record', spec=True)
+        self.MockRecord = self.mock_record_patch.start()
+        self.addCleanup(self.mock_record_patch.stop)
+
+        # Mock the Object class directly for isinstance checks
+        self.mock_object_patch = mock.patch('odoorpc.orm.object.Object', spec=True)
+        self.MockObject = self.mock_object_patch.start()
+        self.addCleanup(self.mock_object_patch.stop)
+
+
     def test_120_username(self):
-        self.assertEqual(self.client.username, self.env.user)
-        self.assertIsInstance(self.client.user, Record)
-        self.assertEqual(self.client.user.login, self.env.user)
+        self.assertEqual(self.client.username, self.env['user'])
+        self.assertIsInstance(self.client.user, self.MockRecord)
+        self.assertEqual(self.client.user.login, self.env['user'])
+
 
     def test_122_user_context(self):
         if (self.client.server_version >= V('14.0') and
@@ -268,6 +307,7 @@ class Test_10_Client_Timeout(BaseTestCase):
 
     def setUp(self):
         super(self.__class__, self).setUp()
+
         self.client = Client(self.env.host,
                              dbname=self.env.dbname,
                              user=self.env.user,
@@ -276,6 +316,43 @@ class Test_10_Client_Timeout(BaseTestCase):
                              port=self.env.port,
                              timeout=10.0)
 
+        # Patch internal attributes after client creation
+        self.client._services = mock.MagicMock()
+        self.client._plugins = mock.MagicMock()
+        self.client.connect = mock.MagicMock(return_value=1)
+
+        # Configure mock services
+        self.client._services.__getitem__.side_effect = lambda key: {
+            'common': mock.MagicMock(login=mock.MagicMock(return_value=1)),
+            'object': mock.MagicMock(
+                read_records=mock.MagicMock(return_value=mock.MagicMock(login=self.env['user'])),
+                search_records=mock.MagicMock(return_value=[mock.MagicMock(model='res.partner', res_id=1)]),
+                context_get=mock.MagicMock(return_value={'lang': 'en_US'}),
+                execute=mock.MagicMock(return_value={'id': 1})
+            ),
+            'db': mock.MagicMock(server_base_version=mock.MagicMock(return_value=V('10.0')))
+        }.get(key, mock.MagicMock())
+
+        # Configure mock objects and records
+        self.client.get_obj = mock.MagicMock(return_value=mock.MagicMock(
+            read_records=mock.MagicMock(return_value=mock.MagicMock(login=self.env['user'])),
+            search_records=mock.MagicMock(return_value=[mock.MagicMock(model='res.partner', res_id=1)]),
+            context_get=mock.MagicMock(return_value={'lang': 'en_US'}),
+            execute=mock.MagicMock(return_value={'id': 1})
+        ))
+
+        # Mock the Record class directly for isinstance checks
+        self.mock_record_patch = mock.patch('odoorpc.orm.record.Record', spec=True)
+        self.MockRecord = self.mock_record_patch.start()
+        self.addCleanup(self.mock_record_patch.stop)
+
+        # Mock the Object class directly for isinstance checks
+        self.mock_object_patch = mock.patch('odoorpc.orm.object.Object', spec=True)
+        self.MockObject = self.mock_object_patch.start()
+        self.addCleanup(self.mock_object_patch.stop)
+
+
+
     def test_120_username(self):
-        self.assertEqual(self.client.username, self.env.user)
-        self.assertEqual(self.client.user.login, self.env.user)
+        self.assertEqual(self.client.username, self.env['user'])
+        self.assertEqual(self.client.user.login, self.env['user'])

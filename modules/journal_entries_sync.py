@@ -19,27 +19,67 @@ class JournalEntrySyncModule:
         ('move_type', '=', 'entry')
     ]
     FIELDS_TO_SYNC = [
-        'id', 'name', 'date', 'ref', 'journal_id', 'line_ids'
+        'id', 'name', 'date', 'ref', 'journal_id', 'line_ids', 'write_date'
     ]
     LINE_FIELDS = [
-        'name', 'partner_id', 'account_id', 'debit', 'credit'
+        'name', 'partner_id', 'account_id', 'debit', 'credit', 'write_date', 'move_id'
     ]
 
-    def __init__(self, source_conn, dest_conn, key_manager):
+    def __init__(self, source_conn, dest_conn, key_manager, last_sync_time):
+        """
+        تهيئة الوحدة بالخدمات التي تحتاجها من المحرك.
+
+        Args:
+            source_conn: كائن اتصال Odoo API للمصدر.
+            dest_conn: كائن اتصال Odoo API للوجهة.
+            key_manager: كائن مدير مفاتيح المزامنة.
+            last_sync_time: آخر طابع زمني للمزامنة الناجحة.
+        """
         self.source = source_conn
         self.dest = dest_conn
         self.key_manager = key_manager
+        self.last_sync_time = last_sync_time
         print("تم تهيئة وحدة مزامنة قيود اليومية.")
 
     def run(self):
+        """
+        نقطة الدخول الرئيسية لتشغيل مزامنة هذه الوحدة.
+        تقوم بجلب السجلات المعدلة من المصدر وتمريرها لدالة المزامنة الفردية.
+        """
         print("بدء مزامنة قيود اليومية...")
         
-        source_ids = self.source.env[self.MODEL].search(self.DOMAIN)
-        source_data = self.source.env[self.MODEL].read(source_ids, self.FIELDS_TO_SYNC)
+        # 1. البحث عن قيود اليومية المعدلة.
+        last_sync_timestamp = self.last_sync_time
+        domain_moves = self.DOMAIN + [('write_date', '>', last_sync_timestamp)]
+        updated_move_ids = self.source[self.MODEL].search(domain_moves)
+
+        # 2. البحث عن سطور قيود اليومية المعدلة.
+        domain_lines = [('write_date', '>', last_sync_timestamp), ('move_id.move_type', '=', 'entry')]
+        lines_data = self.source['account.move.line'].search_read(domain_lines, ['move_id'])
+
+        # 3. الحصول على معرّفات القيود من السطور المعدلة.
+        moves_from_lines = []
+        if lines_data:
+            moves_from_lines = list(set([line['move_id'][0] for line in lines_data if line.get('move_id')]))
+
+        # 4. دمج القائمتين للحصول على قائمة فريدة من القيود التي يجب مزامنتها.
+        all_journal_entry_ids_to_sync = list(set(updated_move_ids + moves_from_lines))
+
+        print(f"تم العثور على {len(all_journal_entry_ids_to_sync)} قيد يومية معدل للمزامنة.")
+
+        # إذا لم تكن هناك سجلات للمزامنة، قم بالخروج من الدالة.
+        if not all_journal_entry_ids_to_sync:
+            print("لا توجد سجلات جديدة أو معدلة للمزامنة.")
+            print("اكتملت مزامنة قيود اليومية.")
+            return
+        
+        # اقرأ البيانات الكاملة للسجلات التي تحتاج إلى مزامنة فقط.
+        source_data = self.source[self.MODEL].read(all_journal_entry_ids_to_sync, self.FIELDS_TO_SYNC)
         
         total_records = len(source_data)
         print(f"تم العثور على {total_records} قيد يومية في المصدر.")
 
+        # المرور على كل سجل قيد يومية تم تحديده للمزامنة.
         for record in source_data:
             print(f"  - معالجة قيد {record.get('name')} (ID: {record['id']})")
             self._sync_record(record)
@@ -47,45 +87,112 @@ class JournalEntrySyncModule:
         print("اكتملت مزامنة قيود اليومية.")
 
     def _sync_record(self, source_record):
-        source_id = source_record['id']
-        destination_id = self.key_manager.get_destination_id(self.MODEL, source_id)
-        
-        if destination_id:
-            print(f"    - القيد ID {source_id} موجود بالفعل في الوجهة. سيتم تخطيه.")
-            return
+        """
+        مزامنة سجل قيد يومية فردي.
+        يقرر ما إذا كان يجب إنشاء سجل جديد أو تحديث سجل موجود بناءً على `x_move_sync_id`.
 
+        Args:
+            source_record (dict): قاموس يمثل بيانات السجل من نظام المصدر.
+        """
+        source_id = source_record['id']
+        
+        # تحويل البيانات لتكون متوافقة مع Odoo API.
         transformed_data = self._transform_data(source_record)
         
         if not transformed_data:
             print(f"    - فشل تحويل بيانات القيد ID {source_id}. سيتم تخطيه.")
             return
 
-        transformed_data['x_sync_id'] = f"{self.MODEL},{source_id}"
-        print(f"    - إنشاء قيد جديد للمصدر ID: {source_id}")
-        
-        try:
-            new_destination_id = self.dest.env[self.MODEL].create(transformed_data)
-            self.dest.env[self.MODEL].browse(new_destination_id).post()
-            self.key_manager.add_mapping(self.MODEL, source_id, new_destination_id)
-            print(f"    - تم إنشاء القيد ID {new_destination_id} وترحيله. تم تسجيل الربط.")
-        except Exception as e:
-            print(f"    - [خطأ فادح] فشل في إنشاء القيد ID {source_id}. الخطأ: {e}")
+        # 1. البحث في الوجهة مباشرة باستخدام `x_move_sync_id`.
+        search_domain_x_sync_id = [('x_move_sync_id', '=', str(source_id))]
+        existing_record_ids = self.dest[self.MODEL].search(search_domain_x_sync_id, limit=1)
+
+        if existing_record_ids:
+            # تحديث (Update): السجل موجود بالفعل في الوجهة.
+            destination_id = existing_record_ids[0]
+            print(f"    - تحديث قيد يومية موجود عبر x_move_sync_id. المصدر ID: {source_id} -> الوجهة ID: {destination_id}")
+            
+            try:
+                # جلب الحالة الحالية لقيد اليومية في الوجهة.
+                current_journal_entry = self.dest[self.MODEL].read([destination_id], ['state'])[0]
+                
+                # إلغاء ترحيل قيد اليومية إذا كان مرحّلاً حاليًا.
+                # هذا ضروري لتعديل قيود اليومية التي تم ترحيلها في Odoo.
+                if current_journal_entry['state'] == 'posted':
+                    print(f"      - إلغاء ترحيل القيد ID {destination_id} قبل التحديث.")
+                    self.dest[self.MODEL].browse([destination_id]).button_draft()
+
+                # تحديث بيانات قيد اليومية.
+                self.dest[self.MODEL].write([destination_id], transformed_data)
+                # تسجيل الربط في قاعدة البيانات المحلية (sync_map.db) بعد التحديث.
+                self.key_manager.add_mapping(self.MODEL, source_id, destination_id)
+                print(f"      - تم تحديث بيانات القيد ID {destination_id}.")
+
+                # إعادة ترحيل قيد اليومية إذا كان مرحّلاً في الأصل.
+                if current_journal_entry['state'] == 'posted':
+                    print(f"      - إعادة ترحيل القيد ID {destination_id} بعد التحديث.")
+                    self.dest[self.MODEL].browse([destination_id]).action_post()
+
+            except Exception as e:
+                # معالجة الأخطاء أثناء تحديث قيد اليومية.
+                print(f"    - [خطأ فادح] فشل في تحديث القيد ID {source_id} (عبر x_move_sync_id). الخطأ: {e}")
+        else:
+            # إنشاء (Create): السجل غير موجود في الوجهة.
+            # إضافة معرف المصدر إلى الحقل المخصص `x_move_sync_id` في الوجهة.
+            transformed_data['x_move_sync_id'] = str(source_id)
+            
+            print(f"    - إنشاء قيد جديد للمصدر ID: {source_id}")
+            
+            try:
+                new_destination_id = self.dest[self.MODEL].create(transformed_data)
+                # بعد الإنشاء، قد تحتاج إلى تنفيذ إجراء "ترحيل" (post) لقيد اليومية.
+                self.dest[self.MODEL].browse([new_destination_id]).action_post()
+                # تسجيل الربط في قاعدة البيانات المحلية (sync_map.db) بعد الإنشاء.
+                self.key_manager.add_mapping(self.MODEL, source_id, new_destination_id)
+                print(f"    - تم إنشاء القيد ID {new_destination_id} وترحيله.")
+            except Exception as e:
+                # معالجة الأخطاء أثناء إنشاء قيد اليومية.
+                print(f"    - [خطأ فادح] فشل في إنشاء القيد ID {source_id}. الخطأ: {e}")
 
     def _transform_data(self, source_record):
+        """
+        تحويل بيانات قيد اليومية من تنسيق المصدر إلى تنسيق مناسب لـ Odoo API في الوجهة.
+        يتضمن معالجة العلاقات (مثل journal_id, account_id, partner_id).
+
+        Args:
+            source_record (dict): قاموس يمثل بيانات السجل من نظام المصدر.
+        Returns:
+            dict: قاموس يمثل البيانات المحولة الجاهزة للإرسال إلى Odoo الوجهة.
+        """
+        final_dest_company_id = 1 # القيمة الافتراضية لمعرف الشركة (عادةً الشركة الرئيسية).
+
         data_to_sync = {
             'move_type': 'entry',
             'ref': source_record.get('ref'),
             'date': source_record.get('date'),
+            'x_original_source_id': str(source_record['id']),
+            'x_original_write_date': source_record['write_date']
         }
 
-        # ربط دفتر اليومية
+        # ربط دفتر اليومية.
         source_journal_id = source_record['journal_id'][0]
-        dest_journal_id = self.key_manager.get_destination_id('account.journal', source_journal_id)
-        if not dest_journal_id: return None
+        # البحث عن معرف دفتر اليومية المقابل في الوجهة باستخدام `x_journal_sync_id`.
+        dest_journal_ids_in_dest = self.dest['account.journal'].search([('x_journal_sync_id', '=', str(source_journal_id))], limit=1)
+
+        # جلب معرف الشركة من دفتر اليومية في الوجهة.
+        if dest_journal_ids_in_dest:
+            dest_journal_id = dest_journal_ids_in_dest[0]
+            journal_info = self.dest['account.journal'].read([dest_journal_id], ['company_id'])
+            if journal_info and journal_info[0].get('company_id'):
+                final_dest_company_id = journal_info[0]['company_id'][0]
+        else:
+            print(f"    - خطأ: دفتر اليومية ID {source_journal_id} غير موجود في الوجهة (لا يوجد x_journal_sync_id مطابق). لا يمكن مزامنة هذا القيد.")
+            return None
+
         data_to_sync['journal_id'] = dest_journal_id
 
-        # تحويل السطور
-        line_ids_data = self.source.env['account.move.line'].read(source_record['line_ids'], self.LINE_FIELDS)
+        # تحويل السطور.
+        line_ids_data = self.source['account.move.line'].read(source_record['line_ids'], self.LINE_FIELDS)
         transformed_lines = []
         for line in line_ids_data:
             transformed_line = {
@@ -93,20 +200,32 @@ class JournalEntrySyncModule:
                 'debit': line['debit'],
                 'credit': line['credit'],
             }
-            # ربط الحساب
+            # ربط الحساب.
             source_acc_id = line['account_id'][0]
-            dest_acc_id = self.key_manager.get_destination_id('account.account', source_acc_id)
-            if not dest_acc_id: 
-                print(f"      - خطأ في السطر: الحساب ID {source_acc_id} غير موجود.")
-                return None
+            # البحث عن معرف الحساب المقابل في الوجهة باستخدام `x_account_sync_id`.
+            dest_acc_ids_in_dest = self.dest['account.account'].search([('x_account_sync_id', '=', str(source_acc_id))], limit=1)
+            if not dest_acc_ids_in_dest:
+                print(f"      - خطأ في السطر: الحساب ID {source_acc_id} غير موجود في الوجهة (لا يوجد x_account_sync_id مطابق). سيتم تخطي هذا السطر.")
+                return None # تخطي هذا السطر
+
+            dest_acc_id = dest_acc_ids_in_dest[0]
+            # التحقق مما إذا كان الحساب المربوط ينتمي إلى نفس شركة قيد اليومية.
+            account_info = self.dest['account.account'].read([dest_acc_id], ['company_ids'])[0]
+            account_company_ids = account_info.get('company_ids', [])
+
+            if final_dest_company_id not in account_company_ids:
+                print(f"      - خطأ في السطر: الحساب ID {source_acc_id} ينتمي لشركة مختلفة في الوجهة. لا يمكن مزامنة هذا السطر.")
+                return None # تخطي هذا السطر إذا كان هناك عدم تطابق في الشركة.
+
             transformed_line['account_id'] = dest_acc_id
             
-            # ربط الشريك (إذا كان موجوداً)
+            # ربط الشريك (إذا كان موجوداً).
             if line.get('partner_id'):
                 source_partner_id = line['partner_id'][0]
-                dest_partner_id = self.key_manager.get_destination_id('res.partner', source_partner_id)
-                if dest_partner_id:
-                    transformed_line['partner_id'] = dest_partner_id
+                # البحث عن معرف الشريك المقابل في الوجهة باستخدام `x_partner_sync_id`.
+                dest_partner_ids_in_dest = self.dest['res.partner'].search([('x_partner_sync_id', '=', str(source_partner_id))], limit=1)
+                if dest_partner_ids_in_dest:
+                    transformed_line['partner_id'] = dest_partner_ids_in_dest[0]
 
             transformed_lines.append((0, 0, transformed_line))
             
