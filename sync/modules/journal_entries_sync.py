@@ -8,6 +8,8 @@ modules/journal_entries_sync.py
 - هذه الوحدة ضرورية للأرصدة الافتتاحية وقيود التسوية.
 """
 
+import logging
+
 class JournalEntrySyncModule:
     """
     وحدة متخصصة لمزامنة قيود اليومية اليدوية (account.move).
@@ -25,7 +27,7 @@ class JournalEntrySyncModule:
         'name', 'partner_id', 'account_id', 'debit', 'credit', 'write_date', 'move_id'
     ]
 
-    def __init__(self, source_conn, dest_conn, key_manager, last_sync_time):
+    def __init__(self, source_conn, dest_conn, key_manager, last_sync_time, loggers=None):
         """
         تهيئة الوحدة بالخدمات التي تحتاجها من المحرك.
 
@@ -34,12 +36,18 @@ class JournalEntrySyncModule:
             dest_conn: كائن اتصال Odoo API للوجهة.
             key_manager: كائن مدير مفاتيح المزامنة.
             last_sync_time: آخر طابع زمني للمزامنة الناجحة.
+            loggers (dict): قاموس يحتوي على كائنات المنسق (loggers) المختلفة.
         """
         self.source = source_conn
         self.dest = dest_conn
         self.key_manager = key_manager
         self.last_sync_time = last_sync_time
-        print("تم تهيئة وحدة مزامنة قيود اليومية.")
+
+        self.logger = loggers.get("journal_entries_sync", logging.getLogger(__name__))
+        self.activity_logger = loggers.get("activity", logging.getLogger(__name__))
+        self.error_logger = loggers.get("error", logging.getLogger(__name__))
+
+        self.logger.info("تم تهيئة وحدة مزامنة قيود اليومية.")
 
     def run(self):
         """
@@ -79,12 +87,146 @@ class JournalEntrySyncModule:
         total_records = len(source_data)
         print(f"تم العثور على {total_records} قيد يومية في المصدر.")
 
-        # المرور على كل سجل قيد يومية تم تحديده للمزامنة.
-        for record in source_data:
-            print(f"  - معالجة قيد {record.get('name')} (ID: {record['id']})")
-            self._sync_record(record)
+        # 2. تجهيز السجلات للمزامنة الدفعية.
+        records_to_create = []
+        records_to_update = []
+
+        for i, record in enumerate(source_data):
+            self.logger.debug(f"  - معالجة قيد {i+1}/{total_records}: {record.get('name')} (ID: {record['id']})")
+            source_id = record['id']
             
-        print("اكتملت مزامنة قيود اليومية.")
+            transformed_data = self._transform_data(record)
+            
+            if not transformed_data:
+                self.logger.warning(f"    - فشل تحويل بيانات القيد ID {source_id}. سيتم تخطيه.")
+                continue
+
+            # 1. البحث في الوجهة مباشرة باستخدام `x_move_sync_id`.
+            search_domain_x_sync_id = [('x_move_sync_id', '=', str(source_id))]
+            existing_record_ids = self.dest[self.MODEL].search(search_domain_x_sync_id, limit=1)
+
+            if existing_record_ids:
+                destination_id = existing_record_ids[0]
+                records_to_update.append({'id': destination_id, 'data': transformed_data, 'source_id': source_id})
+            else:
+                transformed_data['x_move_sync_id'] = str(source_id)
+                records_to_create.append({'data': transformed_data, 'source_id': source_id})
+        
+        self._batch_sync_records(records_to_create, records_to_update)
+            
+        self.logger.info("اكتملت مزامنة قيود اليومية.")
+
+    def _batch_sync_records(self, records_to_create, records_to_update):
+        """
+        يقوم بمزامنة السجلات على دفعات (batch) لزيادة الكفاءة.
+        """
+        self.logger.info(f"بدء المزامنة الدفعية: {len(records_to_create)} سجلات للإنشاء، {len(records_to_update)} سجلات للتحديث.")
+
+        # إنشاء السجلات الجديدة
+        if records_to_create:
+            self.logger.info(f"إنشاء {len(records_to_create)} سجل جديد...")
+            try:
+                new_records_data = [rec['data'] for rec in records_to_create]
+                new_destination_ids = self.dest[self.MODEL].create(new_records_data)
+                for i, new_destination_id in enumerate(new_destination_ids):
+                    source_id = records_to_create[i]['source_id']
+                    self.key_manager.add_mapping(self.MODEL, source_id, new_destination_id)
+                    self.activity_logger.info(f"    - تم إنشاء قيد يومية جديد في الوجهة بمعرف ID: {new_destination_id} من المصدر ID: {source_id}")
+                    # Post the newly created journal entry
+                    self.dest[self.MODEL].browse([new_destination_id]).action_post()
+                    self.activity_logger.info(f"    - تم ترحيل القيد ID {new_destination_id} بعد الإنشاء.")
+            except Exception as e:
+                self.error_logger.error(f"    - [خطأ] فشل في إنشاء سجلات قيود اليومية الجديدة دفعيًا. الخطأ: {e}")
+
+        # تحديث السجلات الموجودة
+        if records_to_update:
+            self.logger.info(f"تحديث {len(records_to_update)} سجل موجود...")
+            try:
+                for record_data in records_to_update:
+                    destination_id = record_data['id']
+                    source_id = record_data['source_id']
+                    data = record_data['data']
+
+                    # Get current state of the journal entry in destination
+                    current_journal_entry = self.dest[self.MODEL].read([destination_id], ['state'])[0]
+                    
+                    # Unpost if currently posted
+                    if current_journal_entry['state'] == 'posted':
+                        self.logger.info(f"      - إلغاء ترحيل القيد ID {destination_id} قبل التحديث.")
+                        self.dest[self.MODEL].browse([destination_id]).button_draft()
+
+                    self.dest[self.MODEL].write([destination_id], data)
+                    self.key_manager.add_mapping(self.MODEL, source_id, destination_id)
+                    self.activity_logger.info(f"    - تم تحديث قيد يومية موجود في الوجهة ID: {destination_id} من المصدر ID: {source_id}")
+
+                    # Repost if it was originally posted
+                    if current_journal_entry['state'] == 'posted':
+                        self.logger.info(f"      - إعادة ترحيل القيد ID {destination_id} بعد التحديث.")
+                        self.dest[self.MODEL].browse([destination_id]).action_post()
+
+            except Exception as e:
+                self.error_logger.error(f"    - [خطأ] فشل في تحديث سجلات قيود اليومية دفعيًا. الخطأ: {e}")
+
+        self.logger.info("اكتملت المزامنة الدفعية لقيود اليومية.")
+
+        self._handle_deletions()
+
+    def _handle_deletions(self):
+        """
+        يتعامل مع حذف السجلات عن طريق أرشفة السجلات في الوجهة
+        التي لم تعد موجودة في المصدر.
+        """
+        self.logger.info("بدء معالجة حذف قيود اليومية...")
+        
+        # 1. جلب جميع معرفات المصدر المخزنة محليًا لـ account.move.
+        mapped_source_ids = self.key_manager.get_all_source_ids_for_model(self.MODEL)
+        self.logger.debug(f"  - تم العثور على {len(mapped_source_ids)} معرف مصدر mapped لـ {self.MODEL}.")
+
+        if not mapped_source_ids:
+            self.logger.info("  - لا توجد معرفات مصدر mapped لـ account.move. تخطي معالجة الحذف.")
+            return
+
+        # 2. جلب جميع معرفات account.move النشطة من نظام المصدر.
+        active_source_ids = self.source[self.MODEL].search([])
+        self.logger.debug(f"  - تم العثور على {len(active_source_ids)} معرف account.move نشط في المصدر.")
+
+        # 3. تحديد السجلات التي تم حذفها في المصدر (موجودة في mapped_source_ids ولكن ليست في active_source_ids).
+        deleted_source_ids = [sid for sid in mapped_source_ids if sid not in active_source_ids]
+        self.logger.info(f"  - تم تحديد {len(deleted_source_ids)} سجل account.move للحذف (الأرشفة) في الوجهة.")
+
+        if not deleted_source_ids:
+            self.logger.info("  - لا توجد سجلات محذوفة في المصدر تتطلب الأرشفة في الوجهة.")
+            return
+
+        # 4. أرشفة السجلات المحذوفة في الوجهة وإزالة الربط.
+        for source_id in deleted_source_ids:
+            destination_id = self.key_manager.get_destination_id(self.MODEL, source_id)
+            if destination_id:
+                try:
+                    # أرشفة السجل في الوجهة (ضبط active = False).
+                    # For account.move, we might need to unpost first if it's posted.
+                    current_move = self.dest[self.MODEL].read([destination_id], ['state'])[0]
+                    if current_move['state'] == 'posted':
+                        self.logger.info(f"      - إلغاء ترحيل القيد ID {destination_id} قبل الأرشفة.")
+                        self.dest[self.MODEL].browse([destination_id]).button_draft()
+
+                    self.dest[self.MODEL].write([destination_id], {'active': False})
+                    self.key_manager.remove_mapping(self.MODEL, source_id)
+                    self.activity_logger.info(f"    - تم أرشفة القيد ID: {destination_id} في الوجهة وإزالة الربط للمصدر ID: {source_id}.")
+                except Exception as e:
+                    self.error_logger.error(f"    - [خطأ] فشل في أرشفة القيد ID {destination_id} (المصدر ID: {source_id}). الخطأ: {e}")
+            else:
+                self.logger.warning(f"    - تحذير: لم يتم العثور على معرف الوجهة لـ account.move المصدر ID: {source_id} في قاعدة بيانات الربط.")
+
+        self.logger.info("اكتملت معالجة حذف قيود اليومية.")
+
+    def _sync_record(self, source_record):
+        """
+        هذه الدالة لم تعد تستخدم بشكل مباشر للمزامنة الفردية بعد التحول للمزامنة الدفعية.
+        يمكن إزالتها أو تعديلها لتناسب أي استخدامات مستقبلية.
+        """
+        self.logger.warning("الدالة _sync_record تم استدعاؤها ولكنها لم تعد تستخدم للمزامنة الفردية. يرجى التحقق.")
+        pass
 
     def _sync_record(self, source_record):
         """

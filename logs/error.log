@@ -1,0 +1,54 @@
+2025-07-26 01:06:32,556 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 01:36:03,840 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 01:36:55,286 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:02:09,437 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:07:48,154 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:09:55,718 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:16:06,204 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:18:17,627 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:21:20,133 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:23:20,467 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:26:14,018 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: OdooConnector.ensure_custom_field() got an unexpected keyword argument 'logger'
+2025-07-26 02:29:36,883 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: name 'logging' is not defined
+2025-07-26 02:30:55,694 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: name 'logging' is not defined
+2025-07-26 02:31:01,590 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: name 'logging' is not defined
+2025-07-26 02:35:01,458 - error_logger - ERROR -     - [خطأ] فشل في تحديث سجلات دفعة واحدة: Object.write() missing 1 required positional argument: 'vals'
+2025-07-26 11:30:53,279 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 11:58:40,313 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 11:59:54,464 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:01:04,267 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:02:09,486 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:02:25,765 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:02:50,231 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:03:45,763 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:04:08,999 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'env'
+2025-07-26 12:04:50,427 - services.odoo_connector - ERROR - حدث خطأ غير متوقع أثناء الاتصال بـ Odoo: Client.login() missing 3 required positional arguments: 'dbname', 'user', and 'password'
+2025-07-26 12:04:50,427 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: Client.login() missing 3 required positional arguments: 'dbname', 'user', and 'password'
+2025-07-26 12:05:52,458 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'model'
+2025-07-26 12:28:59,540 - error_logger - CRITICAL - 
+[خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'NoneType' object has no attribute 'info'

@@ -12,6 +12,7 @@ odoo_connector.py
 - odoorpc: مكتبة خارجية قوية للاتصال بـ Odoo API.
 """
 
+import logging
 import odoorpc
 from urllib.parse import urlparse
 
@@ -23,7 +24,8 @@ class OdooConnector:
     يتولى مسؤولية الاتصال، تسجيل الدخول، وتوفير واجهة API، بالإضافة إلى
     التحقق من وجود الحقول المخصصة وإنشائها في نظام الوجهة.
     """
-    def __init__(self, credentials):
+    def __init__(self, credentials, logger=None):
+        self.logger = logger if logger is not None else logging.getLogger(__name__)
         """
         تهيئة الاتصال باستخدام بيانات الاعتماد المقدمة.
 
@@ -66,17 +68,17 @@ class OdooConnector:
                 protocol=protocol,
                 port=port
             )
-            
-            print(f"تم الاتصال وتسجيل الدخول بنجاح إلى Odoo في '{self.url}' (قاعدة البيانات: {self.db})")
+            self.logger.info(f"تم الاتصال وتسجيل الدخول بنجاح إلى Odoo في '{self.url}' (قاعدة البيانات: {self.db})")
+            self.logger.debug(f"[DEBUG] In _connect: self.api type: {type(self.api)}, self.api.uid: {self.api.uid if self.api else 'N/A'}")
 
         except OdooError as e:
             # معالجة الأخطاء الخاصة بـ Odoo (مثل بيانات الاعتماد الخاطئة).
-            print(f"خطأ في تسجيل الدخول إلى Odoo: {e}")
-            print("الرجاء التحقق من بيانات الاعتماد (URL, DB, Username, Password) في ملف config.ini")
+            self.logger.error(f"خطأ في تسجيل الدخول إلى Odoo: {e}")
+            self.logger.error("الرجاء التحقق من بيانات الاعتماد (URL, DB, Username, Password) في ملف config.ini")
             raise ConnectionError(f"فشل الاتصال بـ Odoo: {e}") from e
         except Exception as e:
             # معالجة أي أخطاء عامة أخرى قد تحدث أثناء الاتصال.
-            print(f"حدث خطأ غير متوقع أثناء الاتصال بـ Odoo: {e}")
+            self.logger.error(f"حدث خطأ غير متوقع أثناء الاتصال بـ Odoo: {e}")
             raise
 
     def get_api(self):
@@ -88,7 +90,7 @@ class OdooConnector:
         """
         # التحقق مما إذا كان الاتصال لا يزال نشطًا، وإعادة الاتصال إذا لزم الأمر.
         if not self.api or self.api.uid is None:
-            print("الاتصال غير قائم. محاولة إعادة الاتصال...")
+            self.logger.warning("الاتصال غير قائم. محاولة إعادة الاتصال...")
             self._connect()
         return self.api
 
@@ -116,7 +118,7 @@ class OdooConnector:
 
         if not existing_field_ids:
             # إذا لم يتم العثور على الحقل، قم بإنشائه.
-            print(f"  - الحقل '{field_name}' غير موجود في النموذج '{model_name}'. جاري الإنشاء...")
+            self.logger.info(f"  - الحقل '{field_name}' غير موجود في النموذج '{model_name}'. جاري الإنشاء...")
             try:
                 IrModelFields.create({
                     'name': field_name, # الاسم التقني للحقل.
@@ -130,14 +132,14 @@ class OdooConnector:
                     'required': False, # هل الحقل إلزامي؟ (لا).
                     'readonly': False, # هل الحقل للقراءة فقط؟ (لا، يمكن تعديله برمجيًا).
                 })
-                print(f"  - تم إنشاء الحقل '{field_name}' بنجاح في النموذج '{model_name}'.")
+                self.logger.info(f"  - تم إنشاء الحقل '{field_name}' بنجاح في النموذج '{model_name}'.")
             except Exception as e:
                 # معالجة الأخطاء أثناء إنشاء الحقل.
-                print(f"  - خطأ أثناء إنشاء الحقل '{field_name}' في النموذج '{model_name}': {e}")
+                self.logger.error(f"  - خطأ أثناء إنشاء الحقل '{field_name}' في النموذج '{model_name}': {e}")
                 raise # إعادة إطلاق الخطأ لإيقاف العملية إذا كان إنشاء الحقل حرجًا.
         else:
             # إذا كان الحقل موجودًا بالفعل، لا تفعل شيئًا.
-            print(f"  - الحقل '{field_name}' موجود بالفعل في النموذج '{model_name}'.")
+            self.logger.info(f"  - الحقل '{field_name}' موجود بالفعل في النموذج '{model_name}'.")
 
 # --- مثال على كيفية الاستخدام (للاختبار فقط) ---
 # يتم تشغيل هذا الجزء فقط إذا تم تشغيل الملف مباشرة (وليس عند استيراده كوحدة).

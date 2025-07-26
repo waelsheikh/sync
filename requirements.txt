@@ -1,0 +1,20 @@
+certifi==2025.7.9
+charset-normalizer==3.4.2
+et_xmlfile==2.0.0
+extend-me==1.1.5
+idna==3.10
+mock==5.2.0
+numpy==2.3.1
+-e git+https://github.com/waelsheikh/sync@1c44e83d76bb1a7bbfad141288f5878748451f15#egg=odoorpc
+openpyxl==3.1.5
+pandas==2.3.1
+python-dateutil==2.9.0.post0
+python-dotenv==1.1.1
+pytz==2025.2
+requests==2.32.4
+setuptools==80.9.0
+simplejson==3.20.1
+six==1.17.0
+tzdata==2025.2
+urllib3==2.5.0
+xlsxwriter==3.2.5

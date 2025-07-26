@@ -113,6 +113,47 @@ class SyncKeyManager:
             print(f"فشل في البحث عن ربط لـ {source_model} ({source_id}): {e}")
             return None
 
+    def get_all_source_ids_for_model(self, source_model):
+        """
+        جلب جميع معرفات المصدر المخزنة لنموذج معين.
+
+        Args:
+            source_model (str): اسم الموديل في Odoo.
+
+        Returns:
+            list: قائمة بمعرفات المصدر (int) لهذا النموذج.
+        Raises:
+            sqlite3.Error: إذا فشلت عملية البحث.
+        """
+        sql = "SELECT source_id FROM mapping WHERE source_model = ?"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql, (source_model,))
+            results = cursor.fetchall()
+            return [row[0] for row in results]
+        except sqlite3.Error as e:
+            print(f"فشل في جلب جميع معرفات المصدر لـ {source_model}: {e}")
+            raise
+
+    def remove_mapping(self, source_model, source_id):
+        """
+        إزالة ربط معين من قاعدة البيانات.
+
+        Args:
+            source_model (str): اسم الموديل في Odoo.
+            source_id (int): المعرف الرقمي للسجل في نظام المصدر.
+        Raises:
+            sqlite3.Error: إذا فشلت عملية الإزالة.
+        """
+        sql = "DELETE FROM mapping WHERE source_model = ? AND source_id = ?"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql, (source_model, source_id))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"فشل في إزالة ربط لـ {source_model} ({source_id}): {e}")
+            raise
+
     def close_connection(self):
         """
         إغلاق اتصال قاعدة البيانات بأمان.
@@ -154,6 +195,16 @@ if __name__ == '__main__':
         # البحث في موديل آخر.
         dest_id_invoice = key_manager.get_destination_id('account.move', 501)
         print(f"البحث عن account.move/501: وجدت المعرف في الوجهة -> {dest_id_invoice}") # المتوقع: 901
+
+        print("\n--- اختبار جلب جميع معرفات المصدر لنموذج ---")
+        all_partner_src_ids = key_manager.get_all_source_ids_for_model('res.partner')
+        print(f"جميع معرفات المصدر لـ res.partner: {all_partner_src_ids}") # المتوقع: [101, 102]
+
+        print("\n--- اختبار إزالة ربط ---")
+        key_manager.remove_mapping('res.partner', 101)
+        print("تمت إزالة ربط res.partner/101.")
+        dest_id_after_remove = key_manager.get_destination_id('res.partner', 101)
+        print(f"البحث عن res.partner/101 بعد الإزالة: {dest_id_after_remove}") # المتوقع: None
 
         # إغلاق الاتصال.
         key_manager.close_connection()

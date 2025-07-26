@@ -50,7 +50,7 @@ class ConfigManager:
             # تحويل قسم الإعدادات إلى قاموس.
             return dict(self.config['odoo_community'])
         except KeyError:
-            raise ValueError("قسم [odoo_community] غير موجود أو غير مكتمل في ملف الإعدادات.")
+            raise ValueError("Section 'COMMUNITY_ODOO' not found or incomplete in config.ini")
 
     def get_online_credentials(self):
         """
@@ -65,7 +65,7 @@ class ConfigManager:
             # تحويل قسم الإعدادات إلى قاموس.
             return dict(self.config['odoo_online'])
         except KeyError:
-            raise ValueError("قسم [odoo_online] غير موجود أو غير مكتمل في ملف الإعدادات.")
+            raise ValueError("Section 'ONLINE_ODOO' not found or incomplete in config.ini")
 
 # --- مثال على كيفية الاستخدام (للاختبار فقط) ---
 # يتم تشغيل هذا الجزء فقط إذا تم تشغيل الملف مباشرة (وليس عند استيراده كوحدة).
