@@ -24,7 +24,7 @@ class JournalEntrySyncModule:
         'id', 'name', 'date', 'ref', 'journal_id', 'line_ids', 'write_date'
     ]
     LINE_FIELDS = [
-        'name', 'partner_id', 'account_id', 'debit', 'credit', 'write_date', 'move_id'
+        'name', 'partner_id', 'account_id', 'debit', 'credit', 'tax_ids', 'tax_tag_ids', 'tax_repartition_line_id', 'write_date', 'move_id'
     ]
 
     def __init__(self, source_conn, dest_conn, key_manager, last_sync_time, loggers=None):
@@ -337,6 +337,11 @@ class JournalEntrySyncModule:
         line_ids_data = self.source['account.move.line'].read(source_record['line_ids'], self.LINE_FIELDS)
         transformed_lines = []
         for line in line_ids_data:
+            # --- الشرط الأهم: تجاهل بنود الضرائب التي أنشأها Odoo تلقائيًا ---
+            if line.get('tax_repartition_line_id'):
+                self.logger.debug(f"      - تجاهل بند الضريبة (ID: {line['id']}) لأنه سيتم إعادة حسابه في الوجهة.")
+                continue
+
             transformed_line = {
                 'name': line['name'],
                 'debit': line['debit'],
@@ -368,6 +373,49 @@ class JournalEntrySyncModule:
                 dest_partner_ids_in_dest = self.dest['res.partner'].search([('x_partner_sync_id', '=', str(source_partner_id))], limit=1)
                 if dest_partner_ids_in_dest:
                     transformed_line['partner_id'] = dest_partner_ids_in_dest[0]
+
+            # --- تعديل حاسم ---
+            # دائماً أرسل tax_ids و tax_tag_ids لمنع الأتمتة في Odoo
+
+            # 1. ربط الضرائب (tax_ids).
+            source_tax_ids = line.get('tax_ids', [])
+            destination_tax_ids = []
+            for tax_id in source_tax_ids:
+                # البحث عن معرف الضريبة المقابل في الوجهة باستخدام `x_tax_sync_id`.
+                dest_tax_ids_in_dest = self.dest['account.tax'].search([('x_tax_sync_id', '=', str(tax_id))], limit=1)
+                if dest_tax_ids_in_dest:
+                    destination_tax_ids.append(dest_tax_ids_in_dest[0])
+                else:
+                    self.logger.warning(f"      - تحذير في السطر: الضريبة ID {tax_id} غير موجودة في الوجهة. سيتم تخطيها.")
+            # أرسل القائمة دائماً، حتى لو كانت فارغة.
+            transformed_line['tax_ids'] = [(6, 0, destination_tax_ids)]
+
+            # 2. ربط علامات الضرائب (tax_tag_ids).
+            source_tax_tag_ids = line.get('tax_tag_ids', [])
+            destination_tax_tag_ids = []
+            for tag_id in source_tax_tag_ids:
+                # البحث عن علامات الضرائب يتطلب مطابقة الاسم والنوع والبلد
+                source_tag = self.source['account.account.tag'].read(tag_id, ['name', 'applicability', 'country_id'])
+                if source_tag:
+                    search_domain = [('name', '=', source_tag['name']), ('applicability', '=', source_tag['applicability'])]
+                    if source_tag.get('country_id'):
+                        # إذا كانت العلامة مرتبطة ببلد، ابحث عن بلد مطابق في الوجهة
+                        source_country_code = self.source['res.country'].read(source_tag['country_id'][0], ['code'])['code']
+                        dest_country_id = self.dest['res.country'].search([('code', '=', source_country_code)], limit=1)
+                        if dest_country_id:
+                            search_domain.append(('country_id', '=', dest_country_id[0]))
+                        else:
+                            search_domain.append(('country_id', '=', False)) # أو تعامل مع الحالة بشكل مختلف
+                    else:
+                        search_domain.append(('country_id', '=', False))
+                    
+                    dest_tag_id = self.dest['account.account.tag'].search(search_domain, limit=1)
+                    if dest_tag_id:
+                        destination_tax_tag_ids.append(dest_tag_id[0])
+                    else:
+                        self.logger.warning(f"      - تحذير في السطر: علامة الضريبة '{source_tag['name']}' غير موجودة في الوجهة. سيتم تخطيها.")
+            # أرسل القائمة دائماً، حتى لو كانت فارغة.
+            transformed_line['tax_tag_ids'] = [(6, 0, destination_tax_tag_ids)]
 
             transformed_lines.append((0, 0, transformed_line))
             

@@ -52,3 +52,59 @@
 [خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'Client' object has no attribute 'model'
 2025-07-26 12:28:59,540 - error_logger - CRITICAL - 
 [خطأ كارثي] توقف التطبيق بشكل غير متوقع. الخطأ: 'NoneType' object has no attribute 'info'
+2025-07-26 17:03:12,258 - error_logger - ERROR -     - [خطأ] فشل في إنشاء سجلات قيود اليومية الجديدة دفعيًا. الخطأ: Private methods (such as 'account.move.with_context') cannot be called remotely.
+Traceback (most recent call last):
+  File "/home/odoo/src/odoo/saas-18.4/odoo/http.py", line 2194, in _transactioning
+    return service_model.retrying(func, env=self.env)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 176, in retrying
+    result = func()
+             ^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/http.py", line 2161, in _serve_ir_http
+    response = self.dispatcher.dispatch(rule.endpoint, args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/http.py", line 2423, in dispatch
+    result = self.request.registry['ir.http']._dispatch(endpoint)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/addons/base/models/ir_http.py", line 354, in _dispatch
+    result = endpoint(**request.params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/http.py", line 762, in route_wrapper
+    result = endpoint(self, *args, **params_ok)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/custom/trial/saas_trial/controllers/main.py", line 424, in jsonrpc
+    res = super(OdooRPC, self).jsonrpc(service, method, args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/http.py", line 762, in route_wrapper
+    result = endpoint(self, *args, **params_ok)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/addons/rpc/controllers.py", line 177, in jsonrpc
+    return dispatch_rpc(service, method, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/http.py", line 413, in dispatch_rpc
+    return dispatch(method, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 108, in dispatch
+    res = execute_kw(db, uid, model, method_, *args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 136, in execute_kw
+    return execute(db, uid, obj, method, *args, **kw or {})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 142, in execute
+    res = execute_cr(cr, uid, obj, method, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 127, in execute_cr
+    result = retrying(partial(call_kw, recs, method, args, kw), env)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 176, in retrying
+    result = func()
+             ^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 66, in call_kw
+    method = get_public_method(model, name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/odoo/src/odoo/saas-18.4/odoo/service/model.py", line 56, in get_public_method
+    raise AccessError(f"Private methods (such as '{model._name}.{name}') cannot be called remotely.")  # pylint: disable=missing-gettext
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+odoo.exceptions.AccessError: Private methods (such as 'account.move.with_context') cannot be called remotely.
+
+

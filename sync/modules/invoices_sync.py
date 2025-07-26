@@ -28,7 +28,7 @@ class InvoiceSyncModule:
         'journal_id', 'move_type', 'state', 'invoice_line_ids', 'write_date'
     ]
     LINE_FIELDS = [
-        'product_id', 'name', 'quantity', 'price_unit', 'account_id', 'tax_ids', 'write_date', 'move_id'
+        'product_id', 'name', 'quantity', 'price_unit', 'account_id', 'tax_ids', 'tax_line_id', 'write_date', 'move_id'
     ]
 
     def __init__(self, source_conn, dest_conn, key_manager, last_sync_time, loggers=None):
@@ -296,8 +296,11 @@ class InvoiceSyncModule:
 
         # قم ببناء أوامر إنشاء البنود الجديدة
         for line in line_ids_data:
-            # تخطي السطور التي لا تمثل منتجًا (مثل سطور الضرائب).
-            if not line.get('product_id'): continue
+            # تخطي السطور التي تمثل ضرائب تم إنشاؤها تلقائيًا (لها tax_line_id).
+            # هذا يمنع إنشاء سطور ضرائب مكررة، حيث سيقوم Odoo بإنشائها بناءً على `tax_ids` في السطر الأصلي.
+            if line.get('tax_line_id'):
+                self.logger.debug(f"      - تخطي سطر ضريبة (ID: {line['id']}) لأنه سيتم إنشاؤه تلقائيًا في الوجهة.")
+                continue
 
             transformed_line = {
                 'name': line['name'],
